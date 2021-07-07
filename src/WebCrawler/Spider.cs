@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -7,12 +9,14 @@ namespace WebCrawler
 {
     public class Spider
     {
+        private readonly int _id;
         private readonly ChannelWriter<string> _discoveredChannel;
         private readonly ChannelReader<string> _instructionChannel;
         private readonly IUrlCrawler _crawler;
 
-        public Spider(ChannelWriter<string> discoveredChannel, ChannelReader<string> instructionChannel, IUrlCrawler crawler)
+        public Spider(int id, ChannelWriter<string> discoveredChannel, ChannelReader<string> instructionChannel, IUrlCrawler crawler)
         {
+            _id = id;
             _discoveredChannel = discoveredChannel ?? throw new ArgumentNullException(nameof(discoveredChannel));
             _instructionChannel = instructionChannel ?? throw new ArgumentNullException(nameof(instructionChannel));
             _crawler = crawler ?? throw new ArgumentNullException(nameof(crawler));
@@ -20,25 +24,35 @@ namespace WebCrawler
 
         public async Task Run(CancellationToken token)
         {
-            Console.WriteLine("Starting spider...");
-            
             try
             {
                 while (await _instructionChannel.WaitToReadAsync(token))
                 {
                     var instruction = await _instructionChannel.ReadAsync(token);
-
+                    
                     var crawled = await _crawler.CrawlForUrls(instruction);
                     if (crawled.success)
-                        foreach (var url in crawled.urls)
+                    {
+                        var links = crawled.urls.ToList();
+                        
+                        var sb = new StringBuilder();
+                        sb.AppendLine($"Visited: {instruction}");
+                        sb.AppendLine($"Links Found: {links.Count}");
+                        
+                        foreach (var urlResult in crawled.urls)
                         {
-                            await _discoveredChannel.WriteAsync(url, token);
+                            sb.AppendLine($"- {urlResult.Url}");
+                            if (urlResult.IsDomain)
+                                await _discoveredChannel.WriteAsync(urlResult.Url, token);
                         }
+
+                        Console.WriteLine(sb.ToString());
+                    }
                 }
             }
-            catch(OperationCanceledException ex)
+            catch (OperationCanceledException)
             {
-                Console.WriteLine("Spider Cancelled...");
+                Console.WriteLine($"Spider {_id} Cancelled...");
             }
         }
     }

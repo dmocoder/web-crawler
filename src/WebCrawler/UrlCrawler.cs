@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
-using AngleSharp.Dom;
-using AngleSharp.Html.Dom;
 
 namespace WebCrawler
 {
@@ -17,9 +15,8 @@ namespace WebCrawler
             _documentLoader = documentLoader ?? throw new ArgumentNullException(nameof(documentLoader));
         }
         
-        public async Task<(bool success, IEnumerable<string> urls)> CrawlForUrls(string address)
+        public async Task<(bool success, IEnumerable<UrlResult> urls)> CrawlForUrls(string address)
         {
-            //validate instruction
             if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
             {
                 Console.WriteLine($"Invalid Url cannot be crawled: {address}");
@@ -31,30 +28,12 @@ namespace WebCrawler
             if (document.StatusCode != HttpStatusCode.OK)
             {
                 Console.WriteLine($"Html Document could not be loaded for {address}");
+                return Failed();
             }
-                
+            
             return (true, document.GetDomainUrls(url => url == uri.Host));
         }
 
-        private (bool, IEnumerable<string>) Failed() => (false, Enumerable.Empty<string>());
-    }
-    
-    public static class UrlCrawlerExtensions
-    {
-        public static IEnumerable<string> GetDomainUrls(this IDocument document, Predicate<string> matchQuery)
-        {
-            var discoveredUrls = new List<string>();
-
-            foreach (var linkElement in document.Links)
-            {
-                if (linkElement is IHtmlAnchorElement link
-                    && matchQuery(link.HostName))
-                {
-                    discoveredUrls.Add(link.Href);
-                }
-            }
-            
-            return discoveredUrls;
-        }
+        private (bool, IEnumerable<UrlResult>) Failed() => (false, Enumerable.Empty<UrlResult>());
     }
 }
